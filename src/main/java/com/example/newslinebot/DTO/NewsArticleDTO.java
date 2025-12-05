@@ -8,5 +8,4 @@ public class NewsArticleDTO {
     private String url;
     private String publishedAt;
 
-
 }
