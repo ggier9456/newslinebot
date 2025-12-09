@@ -1,5 +1,6 @@
 package com.example.newslinebot.service;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
@@ -16,7 +17,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import tools.jackson.databind.ObjectMapper;
 
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -30,26 +30,25 @@ import java.util.*;
 public class FTRService {
 
     // 使用針對新聞摘要優化的輕量模型
-    private static final String MODEL_ID = "google/pegasus-cnn_dailymail";
-    private static final String API_URL = "https://router.huggingface.co/hf-inference/models/" + MODEL_ID;
+    @Value("${huggingface.api-key}")
+    private String API_TOKEN;
+    private static final String API_URL = "https://router.huggingface.co/v1/chat/completions";
+    private static final String NEWS_URL = "http://localhost:8081/makefulltextfeed.php?url=https://techcrunch.com/tag/AI/feed/&format=json";
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper; // 加入 ObjectMapper
 
     public FTRService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
-        this.objectMapper = new ObjectMapper();
     }
 
     public void getNews() {
-        String url = "http://localhost:8081/makefulltextfeed.php?url=https://techcrunch.com/tag/AI/feed/&format=json";
         RestTemplate restTemplate = new RestTemplate();
-        Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+        Map<String, Object> response = restTemplate.getForObject(NEWS_URL, Map.class);
         Map<String, Object> rss = (Map<String, Object>) response.get("rss");
         Map<String, Object> channel = (Map<String, Object>) rss.get("channel");
         List<Map<String, Object>> items = (List<Map<String, Object>>) channel.get("item");
         int i = 0;
         for(Map<String, Object> item : items) {
-            if(i > 0) break;
+            if(i > 1) break;
 
             System.out.println("title: " + item.get("title"));
             System.out.println("guID: " + item.get("guid"));
@@ -95,45 +94,36 @@ public class FTRService {
 
     public String huggingFaceSummarizer(String news){
         HttpHeaders headers = new HttpHeaders();
-//        headers.setBearerAuth(API_TOKEN);
+        headers.setBearerAuth(API_TOKEN);
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
 
-        // 建構請求本體
+        // messages 內容
+        Map<String, String> message = new HashMap<>();
+        message.put("role", "user");
+        String prompt = "說明一下這篇新聞在說什麼 請用繁體中文 並且將你認為的重點條列式說明(大概5點就好): " + news;
+        message.put("content", prompt);
+
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(message);
+
+        // 參數
         Map<String, Object> body = new HashMap<>();
-        String prompt = "Summarize the following news article in bullet points:\n\n" + news;
-        body.put("inputs", prompt);
-
-        // 可選參數：控制摘要長度
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put("min_length", 300); // 摘要最短長度
-        parameters.put("max_length", 800); // 摘要最長長度
-        parameters.put("do_sample", false); // false 通常比較穩定
-        body.put("parameters", parameters);
-
-        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+        body.put("model", "Qwen/Qwen2.5-7B-Instruct:together");
+        body.put("messages", messages);
+        body.put("stream", false);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         try {
-            // 關鍵修改：改用 String.class 接收回應，避開 MediaType 解析錯誤
-            ResponseEntity<String> response = restTemplate.exchange(
-                    API_URL,
-                    HttpMethod.POST,
-                    entity,
-                    String.class
-            );
+            ResponseEntity<Map> response = restTemplate.postForEntity(API_URL, request, Map.class);
+            Map responseBody = response.getBody();
 
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                // 手動解析 JSON 字串
-                // Hugging Face 回傳的是一個陣列: [{"summary_text": "..."}]
-                List<Map<String, Object>> resultList = objectMapper.readValue(
-                        response.getBody(),
-                        List.class
-                );
+            // Hugging Face 回傳格式取 choices[0].message.content
+            List choices = (List) responseBody.get("choices");
+            Map firstChoice = (Map) choices.get(0);
+            Map messageObj = (Map) firstChoice.get("message");
 
-                if (!resultList.isEmpty()) {
-                    return (String) resultList.get(0).get("summary_text");
-                }
-            }
+            return (String) messageObj.get("content");
         } catch (Exception e) {
             // ... 錯誤處理 ...
             e.printStackTrace();
