@@ -109,7 +109,7 @@ public class FTRService {
 
         // 參數
         Map<String, Object> body = new HashMap<>();
-        body.put("model", "Qwen/Qwen2.5-7B-Instruct:together");
+        body.put("model", "Qwen/Qwen3-4B-Instruct-2507:nscale");
         body.put("messages", messages);
         body.put("stream", false);
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
