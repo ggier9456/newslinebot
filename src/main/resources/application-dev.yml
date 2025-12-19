@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: newslinebot
+  datasource:
+    url: jdbc:postgresql://localhost:5432/nlb
+    username: ${DB_USER}
+    password: ${DB_PWD}
+    driver-class-name: org.postgresql.Driver
+huggingface:
+  api-key: ${HUGGINGFACE_API_KEY}

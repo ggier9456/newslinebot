@@ -25,6 +25,8 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class FTRService {
@@ -33,7 +35,8 @@ public class FTRService {
     @Value("${huggingface.api-key}")
     private String API_TOKEN;
     private static final String API_URL = "https://router.huggingface.co/v1/chat/completions";
-    private static final String NEWS_URL = "http://localhost:8081/makefulltextfeed.php?url=https://techcrunch.com/tag/AI/feed/&format=json";
+//    private static final String NEWS_URL = "http://localhost:8081/makefulltextfeed.php?url=https://techcrunch.com/tag/Google/feed/&format=json";
+    private static final String NEWS_URL = "http://localhost:8081/makefulltextfeed.php?url=https://techcrunch.com/feed/&format=json";
     private final RestTemplate restTemplate;
 
     public FTRService(RestTemplate restTemplate) {
@@ -49,9 +52,9 @@ public class FTRService {
         int i = 0;
         for(Map<String, Object> item : items) {
             if(i > 1) break;
-
+            System.out.println("第" +(i+1) + "篇新聞");
             System.out.println("title: " + item.get("title"));
-            System.out.println("guID: " + item.get("guid"));
+            System.out.println("guID: " + (String)item.get("guid"));
             System.out.println("description: " );
             String text = parseHtml((String) item.get("description"));
             String summary = huggingFaceSummarizer(text);
@@ -129,5 +132,15 @@ public class FTRService {
             e.printStackTrace();
         }
         return "摘要生成失敗";
+    }
+
+    public String parseNewsGUID(String url){
+        Pattern pattern = Pattern.compile("[?&]p=(\\d+)");
+        Matcher matcher = pattern.matcher(url);
+        if(matcher.find()) {
+            String p = matcher.group(1);
+            return p;
+        }
+        return null;
     }
 }
